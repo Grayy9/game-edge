@@ -55,4 +55,3 @@ python scripts/bench.py --port 9000 --clients 16 --requests 100 --payload-bytes 
 ## 项目用途
 
 此仓库展示第一阶段实现和设计取舍。面试时可以围绕分帧、非阻塞连接、慢客户端背压、上游故障隔离与可复现压测讨论，不应把模拟房间服务描述成完整游戏服务器。
-

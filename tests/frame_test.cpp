@@ -14,10 +14,18 @@ int main() {
   CHECK(decoder.feed(first.data(), 2));
   Frame out;
   CHECK(!decoder.pop(out));
+
   CHECK(decoder.feed(first.data() + 2, first.size() - 3));
   CHECK(!decoder.pop(out));
   CHECK(decoder.feed(first.data() + first.size() - 1, 1));
   CHECK(decoder.pop(out) && out.type == 1 && out.payload == std::vector<uint8_t>({'h', 'i'}));
+
+  const auto select_room = encode_frame(Frame{4, {0, 0, 0, 1}});
+  CHECK(decoder.feed(select_room.data(), select_room.size()));
+  CHECK(decoder.pop(out) && out.type == 4 && out.payload == std::vector<uint8_t>({0, 0, 0, 1}));
+  FrameDecoder bad_room;
+  const uint8_t short_room[] = {0, 0, 0, 2, 4, 1};
+  CHECK(!bad_room.feed(short_room, sizeof(short_room)));
 
   const auto ping = encode_frame(Frame{2, {}});
   const auto pong = encode_frame(Frame{3, {}});

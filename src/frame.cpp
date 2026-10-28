@@ -6,7 +6,8 @@
 namespace game_edge {
 namespace {
 bool valid_type(uint8_t type, std::size_t payload_size) {
-  return type == 1 || ((type == 2 || type == 3) && payload_size == 0);
+  return type == 1 || ((type == 2 || type == 3) && payload_size == 0) ||
+         (type == 4 && payload_size == 4);
 }
 }  // namespace
 

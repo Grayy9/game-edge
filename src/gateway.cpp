@@ -61,7 +61,24 @@ bool Gateway::read(Session& session, bool from_client) {
       if (from_client) {
         if (frame.type == 2) {
           if (!enqueue(session.client, encode_frame(Frame{3, {}}))) return false;
+        } else if (frame.type == 4) {
+          if (config_.room_ports.empty() || session.room_selected) return false;
+          const auto& bytes = frame.payload;
+          const uint32_t room = (static_cast<uint32_t>(bytes[0]) << 24) |
+                                (static_cast<uint32_t>(bytes[1]) << 16) |
+                                (static_cast<uint32_t>(bytes[2]) << 8) | bytes[3];
+          const auto port = config_.room_ports[room % config_.room_ports.size()];
+          const Socket upstream = connect_nonblocking(config_.upstream_host, port);
+          if (upstream == invalid_socket) return false;
+          if (!poller_.watch(upstream, true, true)) {
+            close_socket(upstream);
+            return false;
+          }
+          session.upstream.socket = upstream;
+          session.room_selected = true;
+          index_[upstream] = {session.id, false};
         } else if (frame.type == 1) {
+          if (!session.room_selected) return false;
           if (!enqueue(target, encode_frame(frame))) return false;
         }
       } else {
@@ -82,6 +99,7 @@ bool Gateway::refresh(Session& session) {
   if (session.upstream.paused && pending(session.client) <= low_water) session.upstream.paused = false;
   if (!poller_.modify(session.client.socket, !session.client.paused && !session.upstream_closed,
                       pending(session.client) != 0)) return false;
+  if (!session.room_selected) return true;
   if (session.upstream_closed) return true;
   if (session.upstream_detached) {
     if (session.upstream.paused) return true;
@@ -129,8 +147,10 @@ void Gateway::accept_clients() {
   while (true) {
     const Socket client = accept_nonblocking(listener_);
     if (client == invalid_socket) return;
-    const Socket upstream = connect_nonblocking(config_.upstream_host, config_.upstream_port);
-    if (upstream == invalid_socket) {
+    const bool legacy = config_.room_ports.empty();
+    const Socket upstream = legacy ? connect_nonblocking(config_.upstream_host, config_.upstream_port)
+                                   : invalid_socket;
+    if (legacy && upstream == invalid_socket) {
       close_socket(client);
       continue;
     }
@@ -138,16 +158,18 @@ void Gateway::accept_clients() {
     session->id = next_id_++;
     session->client.socket = client;
     session->upstream.socket = upstream;
+    session->room_selected = legacy;
     session->last_client = std::chrono::steady_clock::now();
-    if (!poller_.watch(client, true, false) || !poller_.watch(upstream, true, true)) {
+    if (!poller_.watch(client, true, false) ||
+        (legacy && !poller_.watch(upstream, true, true))) {
       poller_.remove(client);
-      poller_.remove(upstream);
+      if (legacy) poller_.remove(upstream);
       close_socket(client);
       close_socket(upstream);
       continue;
     }
     index_[client] = {session->id, true};
-    index_[upstream] = {session->id, false};
+    if (legacy) index_[upstream] = {session->id, false};
     sessions_[session->id] = std::move(session);
     ++accepted_;
   }

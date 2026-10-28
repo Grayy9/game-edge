@@ -17,6 +17,7 @@ struct GatewayConfig {
   uint16_t listen_port;
   const char* upstream_host;
   uint16_t upstream_port;
+  std::vector<uint16_t> room_ports;
   std::chrono::milliseconds idle_timeout{30000};
   std::chrono::milliseconds drain_timeout{5000};
 };
@@ -46,6 +47,7 @@ class Gateway {
     bool connecting = true;
     bool upstream_closed = false;
     bool upstream_detached = false;
+    bool room_selected = false;
     std::chrono::steady_clock::time_point last_client;
   };
 
